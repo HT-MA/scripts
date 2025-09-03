@@ -1,0 +1,156 @@
+import os
+import requests
+import time
+from dotenv import load_dotenv
+
+# 通用API请求函数，减少重复代码
+def github_api_request(method, url, headers, data=None):
+    response = getattr(requests, method)(url, headers=headers, json=data)
+    response.raise_for_status()
+    return response.json() if response.content else None
+
+# 加载.env文件中的环境变量
+def load_github_env():
+    load_dotenv()
+    github_token = os.getenv('github_token')
+    github_owner = os.getenv('github_owner')
+    github_repo = os.getenv('github_repo')
+    
+    if not all([github_token, github_owner, github_repo]):
+        raise ValueError("请确保.env文件中包含github_token, github_owner和github_repo字段")
+    
+    # 创建标准请求头
+    headers = {
+        "Authorization": f"token {github_token}",
+        "Accept": "application/vnd.github.v3+json"
+    }
+    
+    return github_token, github_owner, github_repo, headers
+
+# 创建临时分支（基于main分支并添加差异提交）
+def create_temp_branch_with_diff(github_owner, github_repo, headers):
+    # 获取main分支的最新commit SHA
+    branch_data = github_api_request(
+        'get',
+        f"https://api.github.com/repos/{github_owner}/{github_repo}/branches/main",
+        headers
+    )
+    latest_commit_sha = branch_data['commit']['sha']
+    
+    # 生成临时分支名称
+    timestamp = int(time.time())
+    temp_branch_name = f"temp-pr-branch-{timestamp}"
+    
+    # 创建临时分支
+    github_api_request(
+        'post',
+        f"https://api.github.com/repos/{github_owner}/{github_repo}/git/refs",
+        headers,
+        {"ref": f"refs/heads/{temp_branch_name}", "sha": latest_commit_sha}
+    )
+    
+    print(f"✅ 临时分支 '{temp_branch_name}' 创建成功！")
+    print(f"🔗 分支基于: main 的最新commit")
+    
+    # 创建一个空的commit来确保临时分支与main分支有差异
+    print("🔄 正在添加差异提交...")
+    
+    # 获取commit信息
+    commit_data = github_api_request(
+        'get',
+        f"https://api.github.com/repos/{github_owner}/{github_repo}/git/commits/{latest_commit_sha}",
+        headers
+    )
+    
+    # 创建新的空commit
+    new_commit = github_api_request(
+        'post',
+        f"https://api.github.com/repos/{github_owner}/{github_repo}/git/commits",
+        headers,
+        {
+            "message": "Empty commit for PR creation",
+            "parents": [latest_commit_sha],
+            "tree": commit_data["tree"]["sha"]
+        }
+    )
+    
+    # 更新临时分支指向新的commit
+    github_api_request(
+        'patch',
+        f"https://api.github.com/repos/{github_owner}/{github_repo}/git/refs/heads/{temp_branch_name}",
+        headers,
+        {"sha": new_commit["sha"], "force": True}
+    )
+    
+    print(f"✅ 已添加差异提交，确保临时分支与main分支有差异")
+    return temp_branch_name
+
+# 创建empty PR
+def create_empty_pr(github_owner, github_repo, headers, title, head, base, body=""):
+    # 创建PR，maintainer_can_modify=True允许创建无差异PR
+    pr_data = github_api_request(
+        'post',
+        f"https://api.github.com/repos/{github_owner}/{github_repo}/pulls",
+        headers,
+        {
+            "title": title,
+            "head": head,  # 源分支（临时分支，有差异）
+            "base": base,  # 目标分支（用户输入）
+            "body": body,
+            "draft": False,
+            "maintainer_can_modify": True
+        }
+    )
+    
+    print(f"✅ PR创建成功!")
+    print(f"🔗 PR链接: {pr_data['html_url']}")
+    print(f"📝 PR标题: {pr_data['title']}")
+    print(f"👤 创建者: {pr_data['user']['login']}")
+    
+    return pr_data
+
+# 主函数
+def main():
+    try:
+        # 加载GitHub环境变量和请求头
+        github_token, github_owner, github_repo, headers = load_github_env()
+        
+        print("🌟 GitHub自动创建Empty PR工具")
+        print(f"🔧 正在连接到仓库: {github_owner}/{github_repo}")
+        
+        # 获取用户输入
+        title = input("\n请输入PR标题: ")
+        target_branch = input("请输入要合并到的目标分支名: ")
+        
+        # 创建基于main分支的临时分支（作为源分支，包含差异）
+        print("\n🔄 正在创建临时分支并添加差异提交...")
+        source_branch = create_temp_branch_with_diff(github_owner, github_repo, headers)
+        
+        body = input("请输入PR描述 (可选，直接回车跳过): ")
+        
+        # 创建PR：从临时分支(source_branch)合并到用户指定的目标分支(target_branch)
+        create_empty_pr(github_owner, github_repo, headers, title, source_branch, target_branch, body)
+        
+    except Exception as e:
+        print(f"❌ 程序执行出错: {e}")
+        # 提取更具体的错误信息
+        if hasattr(e, 'response') and hasattr(e.response, 'content') and e.response.content:
+            try:
+                error_data = e.response.json()
+                print(f"📋 错误详情: {error_data}")
+                
+                # 常见错误提示
+                if 'errors' in error_data:
+                    for err in error_data['errors']:
+                        if err.get('code') == 'custom' and 'No commits between' in err.get('message', ''):
+                            print("💡 提示: 两个分支之间没有可检测的差异")
+            except:
+                pass
+        
+        print("💡 建议检查:")
+        print("  1. .env文件中的GitHub信息是否正确")
+        print("  2. 仓库中是否存在main分支")
+        print("  3. GitHub Token是否有足够的权限")
+
+if __name__ == "__main__":
+    main()
