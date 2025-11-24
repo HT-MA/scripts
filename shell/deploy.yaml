@@ -1,7 +1,7 @@
 deploy:
   hpa:
     keda:
-      enable:true
+      enable: true
     enabled: true
     minReplicas: 10
     maxReplicas: 20
