@@ -1,9 +1,11 @@
 deploy:
   hpa:
+    keda:
+      enable:true
     enabled: true
-    minReplicas: 3
-    maxReplicas: 15
-    targetCPUUtilizationPercentage: 70
+    minReplicas: 10
+    maxReplicas: 20
+    targetCPUUtilizationPercentage: 60
   image:
     - name: logger
       repo: myregistry/logger
