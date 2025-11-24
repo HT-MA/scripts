@@ -1,0 +1,16 @@
+deploy:
+  hpa:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 15
+    targetCPUUtilizationPercentage: 70
+  image:
+    - name: logger
+      repo: myregistry/logger
+      tag: v1.2.3
+    - name: webserver
+      repo: myregistry/webserver
+      tag: v4.5.6
+    - name: database
+      repo: myregistry/database
+      tag: v7.8.9
