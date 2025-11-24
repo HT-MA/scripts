@@ -7,10 +7,10 @@ deploy:
   image:
     - name: logger
       repo: myregistry/logger
-      tag: 001
+      tag: v1.2.3
     - name: webserver
       repo: myregistry/webserver
-      tag: v009
+      tag: v4.5.6
     - name: database
       repo: myregistry/database
-      tag: v0002
+      tag: v7.8.9
