@@ -1,0 +1,290 @@
+{
+  "name": "GitHub Tag Sync Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "resource": "file",
+        "operation": "get",
+        "owner": {
+          "__rl": true,
+          "value": "HT-MA",
+          "mode": "list",
+          "cachedResultName": "HT-MA",
+          "cachedResultUrl": "https://github.com/HT-MA"
+        },
+        "repository": {
+          "__rl": true,
+          "value": "scripts",
+          "mode": "list",
+          "cachedResultName": "scripts",
+          "cachedResultUrl": "https://github.com/HT-MA/scripts"
+        },
+        "filePath": "shell/deploy.yaml",
+        "asBinaryProperty": false,
+        "additionalParameters": {}
+      },
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1.1,
+      "position": [
+        -1200,
+        256
+      ],
+      "id": "efb0bd04-cf97-40dd-9e8b-f7d5c0d163f7",
+      "name": "scripts",
+      "webhookId": "f247eb6b-42a5-44f1-af83-7e9ab392e113",
+      "credentials": {
+        "githubApi": {
+          "id": "Q91s0WsixMbUoXyU",
+          "name": "GitHub account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "operation": "get",
+        "owner": {
+          "__rl": true,
+          "value": "HT-MA",
+          "mode": "list",
+          "cachedResultName": "HT-MA",
+          "cachedResultUrl": "https://github.com/HT-MA"
+        },
+        "repository": {
+          "__rl": true,
+          "value": "charts",
+          "mode": "list",
+          "cachedResultName": "charts",
+          "cachedResultUrl": "https://github.com/HT-MA/charts"
+        },
+        "filePath": "deploy.yaml",
+        "asBinaryProperty": false,
+        "additionalParameters": {}
+      },
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1.1,
+      "position": [
+        -1200,
+        48
+      ],
+      "id": "2726c193-b5a6-48a8-aa38-4c45fc453f08",
+      "name": "chart",
+      "webhookId": "f247eb6b-42a5-44f1-af83-7e9ab392e113",
+      "credentials": {
+        "githubApi": {
+          "id": "Q91s0WsixMbUoXyU",
+          "name": "GitHub account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1520,
+        144
+      ],
+      "id": "069d5550-926d-429c-8245-b7bfb03c1da2",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "command": "=echo  \"{{ $json.content }}\" | base64 -d"
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        -992,
+        48
+      ],
+      "id": "c2272000-6d62-4a22-b460-475e8735e743",
+      "name": "Execute Command"
+    },
+    {
+      "parameters": {
+        "command": "=echo  \"{{ $json.content }}\" | base64 -d"
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        -992,
+        256
+      ],
+      "id": "125be81b-80c7-4b97-b093-fe4f2bf4d37a",
+      "name": "Execute Command1"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -720,
+        160
+      ],
+      "id": "81f44a64-9f23-4d60-97b4-864a72be9759",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 输出查看 `items` 数组，确保数据正确合并\nconsole.log(items);  // 打印所有项，查看结构\n\n// 确保有两个项（A 文件和 B 文件）\nif (!items || items.length < 2) {\n  throw new Error('Expected two items (A and B files), but found none or insufficient items.');\n}\n\n// 获取 A 和 B 文件的解码内容\nconst chartDecodedContent = items[0]?.json?.stdout;  // A 文件的解码内容 (stdout)\nconst scriptsDecodedContent = items[1]?.json?.stdout;  // B 文件的解码内容 (stdout)\n\n// 如果解码内容为空，抛出错误\nif (!chartDecodedContent || !scriptsDecodedContent) {\n  throw new Error('Could not find decoded content for A or B files.');\n}\n\n// 输出解码后的内容（用于调试）\nconsole.log('A File Decoded Content:', chartDecodedContent);\nconsole.log('B File Decoded Content:', scriptsDecodedContent);\n\n// 解析 A 文件中的 `image` tag 列表\nconst chartImageTags = [];\nconst chartImageTagRegex = /- name:\\s*(\\S+)[\\s\\S]*?tag:\\s*(\\S+)/g;\nlet match;\nwhile ((match = chartImageTagRegex.exec(chartDecodedContent)) !== null) {\n  chartImageTags.push({\n    name: match[1], // image name (logger, webserver, database)\n    tag: match[2]   // image tag (001, v009, v0002)\n  });\n}\n\n// 输出 A 文件的 image tag 数据（用于调试）\nconsole.log('Chart Image Tags:', chartImageTags);\n\n// 解析 B 文件中的 `image` tag 列表并替换\nlet updatedBFileContent = scriptsDecodedContent;\n\n// 使用正则表达式查找 B 文件中的 `image` 和 `tag`\nconst scriptsImageTagRegex = /- name:\\s*(\\S+)[\\s\\S]*?tag:\\s*(\\S+)/g;\nupdatedBFileContent = updatedBFileContent.replace(scriptsImageTagRegex, (match, imageName, currentTag) => {\n  // 查找 A 文件中对应的 `image name` 的 tag\n  const matchingTag = chartImageTags.find(tag => tag.name === imageName);\n\n  if (matchingTag) {\n    console.log(`Replacing ${imageName} tag in B file from ${currentTag} to ${matchingTag.tag}`);\n    return match.replace(currentTag, matchingTag.tag);  // 替换 B 文件中的 tag\n  }\n\n  return match;  // 如果找不到匹配的 image，则保持原样\n});\n\n// 返回更新后的 B 文件内容，供后续节点使用\nreturn [\n  {\n    json: {\n      updatedBFile: updatedBFileContent\n    }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -512,
+        160
+      ],
+      "id": "3956e4ba-526b-403f-a8f0-7d5f2fe0150b",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "operation": "edit",
+        "owner": {
+          "__rl": true,
+          "value": "HT-MA",
+          "mode": "name"
+        },
+        "repository": {
+          "__rl": true,
+          "value": "scripts",
+          "mode": "list",
+          "cachedResultName": "scripts",
+          "cachedResultUrl": "https://github.com/HT-MA/scripts"
+        },
+        "filePath": "shell/deploy.yaml",
+        "fileContent": "={{ $json.updatedBFile }}",
+        "commitMessage": "update image"
+      },
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1.1,
+      "position": [
+        -304,
+        160
+      ],
+      "id": "d0051c09-9111-4137-8f2e-582d74abbd0d",
+      "name": "Edit a file",
+      "webhookId": "0dd698ad-9785-4f66-af96-054569ca331c",
+      "credentials": {
+        "githubApi": {
+          "id": "Q91s0WsixMbUoXyU",
+          "name": "GitHub account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "获取仓库B文件",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "获取仓库A文件",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "scripts": {
+      "main": [
+        [
+          {
+            "node": "Execute Command1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "chart": {
+      "main": [
+        [
+          {
+            "node": "Execute Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "chart",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "scripts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Command1": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Execute Command": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Edit a file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "a3ffb0e1-151d-4e99-997e-89753d5fcb8d",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "a1ab45d9a3571a21c57d9a70bda713fc47196b42a7a2d6d8a8115aa32fb38b97"
+  },
+  "id": "PTu5sW4EFjd3hGAM",
+  "tags": []
+}
